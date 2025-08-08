@@ -1,0 +1,103 @@
+name: baria-bot
+services:
+  bot:
+    build:
+      context: C:\Users\jicoo\OneDrive\Desktop\code\baria-bot\bot
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_started
+        required: true
+      rag:
+        condition: service_started
+        required: true
+    environment:
+      BOT_TOKEN: REPLACE_WITH_YOUR_TOKEN
+      DB_URL: postgresql://app:app@db:5432/baria
+      RAG_URL: http://rag:8000/ask
+    networks:
+      default: null
+  db:
+    environment:
+      POSTGRES_DB: baria
+      POSTGRES_PASSWORD: app
+      POSTGRES_USER: app
+    image: pgvector/pgvector:pg16
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 5432
+        published: "5432"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: dbdata
+        target: /var/lib/postgresql/data
+        volume: {}
+      - type: bind
+        source: C:\Users\jicoo\OneDrive\Desktop\code\baria-bot\db\init.sql
+        target: /docker-entrypoint-initdb.d/00-init.sql
+        read_only: true
+        bind:
+          create_host_path: true
+  ollama:
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:11434/api/tags
+      timeout: 5s
+      interval: 10s
+      retries: 10
+    image: ollama/ollama:latest
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 11434
+        published: "11434"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: ollama
+        target: /root/.ollama
+        volume: {}
+  rag:
+    build:
+      context: C:\Users\jicoo\OneDrive\Desktop\code\baria-bot\rag
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_started
+        required: true
+      ollama:
+        condition: service_started
+        required: true
+    environment:
+      DB_URL: postgresql://app:app@db:5432/baria
+      EMB_MODEL_NAME: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+      OLLAMA_BASE_URL: http://host.docker.internal:11434/v1
+      OLLAMA_MODEL: llama3.1:8b
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8000
+        published: "8000"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: C:\Users\jicoo\OneDrive\Desktop\code\baria-bot\rag\app
+        target: /app/app
+        bind:
+          create_host_path: true
+networks:
+  default:
+    name: baria-bot_default
+volumes:
+  dbdata:
+    name: baria-bot_dbdata
+  ollama:
+    name: baria-bot_ollama
