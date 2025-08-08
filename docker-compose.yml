@@ -23,6 +23,8 @@ services:
 
   rag:
     build: ./rag
+    volumes:
+      - ./rag/app:/app/app
     environment:
       DB_URL: postgresql://app:app@db:5432/baria
       EMB_MODEL_NAME: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
