@@ -1,0 +1,91 @@
+import os
+from typing import List, Dict, Any, Optional
+import psycopg2
+import psycopg2.extras
+from datetime import datetime
+from sentence_transformers import SentenceTransformer
+
+DB_URL = os.getenv("DB_URL", "postgresql://app:app@db:5432/app")
+EMB_MODEL_NAME = os.getenv("EMB_MODEL_NAME", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+EMB_DIM = int(os.getenv("EMB_DIM", "384"))  # для MiniLM-L12-v2 = 384
+
+_model = None
+def get_model():
+    global _model
+    if _model is None:
+        _model = SentenceTransformer(EMB_MODEL_NAME)
+    return _model
+
+def embed_texts(texts: List[str]) -> List[List[float]]:
+    # normalize_embeddings=True -> косинусная метрика корректно
+    return get_model().encode(texts, normalize_embeddings=True).tolist()
+
+def connect():
+    return psycopg2.connect(DB_URL)
+
+def _vec_literal(vec: List[float]) -> str:
+    # pgvector принимает строку вида: [0.12,0.34,...]
+    return "[" + ",".join(f"{x:.7f}" for x in vec) + "]"
+
+def ensure_schema():
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS kb_chunk (
+                id BIGSERIAL PRIMARY KEY,
+                content TEXT NOT NULL,
+                phase TEXT,
+                source TEXT,
+                last_reviewed TIMESTAMPTZ,
+                embedding VECTOR({EMB_DIM})
+            );
+        """)
+        conn.commit()
+
+def index_chunks(chunks: List[Dict[str, Any]]) -> int:
+    """
+    chunks: [{content, phase, source, last_reviewed?}]
+    """
+    texts = [c["content"] for c in chunks]
+    embs = embed_texts(texts)
+    inserted = 0
+    with connect() as conn, conn.cursor() as cur:
+        for c, e in zip(chunks, embs):
+            last_rev = c.get("last_reviewed")
+            if isinstance(last_rev, str):
+                try:
+                    last_rev = datetime.fromisoformat(last_rev)
+                except Exception:
+                    last_rev = None
+            vec = _vec_literal(e)
+            cur.execute(
+                """
+                INSERT INTO kb_chunk (content, phase, source, last_reviewed, embedding)
+                VALUES (%s, %s, %s, %s, %s::vector)
+                """,
+                (c.get("content"), c.get("phase"), c.get("source"), last_rev, vec),
+            )
+            inserted += 1
+        conn.commit()
+    return inserted
+
+def search_similar(query: str, top_k: int = 5, min_score: Optional[float] = None) -> List[Dict[str, Any]]:
+    q_emb = embed_texts([query])[0]
+    q_vec = _vec_literal(q_emb)
+    rows: List[Dict[str, Any]] = []
+    with connect() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        # <-> для cosine distance (при normalize_embeddings=True)
+        cur.execute(
+            f"""
+            SELECT id, content, phase, source, last_reviewed,
+                   1 - (embedding <-> %s::vector) AS score
+            FROM kb_chunk
+            ORDER BY embedding <-> %s::vector
+            LIMIT %s
+            """,
+            (q_vec, q_vec, top_k),
+        )
+        for r in cur.fetchall():
+            if min_score is None or r["score"] >= min_score:
+                rows.append(dict(r))
+    return rows
