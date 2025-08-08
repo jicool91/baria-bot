@@ -45,4 +45,3 @@ def search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """, (q_emb, top_k))
         rows = cur.fetchall()
         return [{"id": r[0], "doc_id": r[1], "source": r[2], "content": r[3], "score": float(r[4])} for r in rows]
-# synced via bind mount
