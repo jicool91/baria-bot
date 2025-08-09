@@ -89,6 +89,7 @@ async def process_surgery_date(message: Message, state: FSMContext):
             "Например: 15.06.2024"
         )
 
+
 async def process_doctor_code(message: Message, state: FSMContext):
     """Обработка кода врача"""
     code = message.text.upper().strip()
