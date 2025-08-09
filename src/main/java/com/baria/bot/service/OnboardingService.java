@@ -1,7 +1,8 @@
 package com.baria.bot.service;
 
 import com.baria.bot.model.User;
-import com.baria.bot.repository.DoctorCodeRepository;
+import com.baria.bot.model.User.Goal;
+import com.baria.bot.model.User.Phase;
 import com.baria.bot.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,11 +13,9 @@ import java.util.Optional;
 @Service
 public class OnboardingService {
     private final UserRepository userRepository;
-    private final DoctorCodeRepository doctorCodeRepository;
 
-    public OnboardingService(UserRepository userRepository, DoctorCodeRepository doctorCodeRepository) {
+    public OnboardingService(UserRepository userRepository) {
         this.userRepository = userRepository;
-        this.doctorCodeRepository = doctorCodeRepository;
     }
 
     public User getOrCreate(Long tgId, String username) {
@@ -29,32 +28,65 @@ public class OnboardingService {
     }
 
     @Transactional
-    public void saveBasicInfo(Long tgId, String fullName, LocalDate surgeryDate) {
+    public void saveSurgeryDate(Long tgId, LocalDate surgeryDate) {
         userRepository.findByTgId(tgId).ifPresent(u -> {
-            u.setFullName(fullName);
             u.setSurgeryDate(surgeryDate);
             userRepository.save(u);
         });
     }
 
     @Transactional
-    public boolean saveDoctorCode(Long tgId, String code) {
-        if (!doctorCodeRepository.existsById(code)) {
-            return false;
-        }
-        Optional<User> user = userRepository.findByTgId(tgId);
-        user.ifPresent(u -> {
-            u.setDoctorCode(code);
+    public void saveConsent(Long tgId) {
+        userRepository.findByTgId(tgId).ifPresent(u -> {
+            u.setConsentAt(java.time.LocalDateTime.now());
             userRepository.save(u);
         });
-        return true;
     }
 
     @Transactional
-    public void saveConsent(Long tgId) {
+    public void saveMeasures(Long tgId, Integer height, java.math.BigDecimal weight, Goal goal) {
         userRepository.findByTgId(tgId).ifPresent(u -> {
-            u.setConsentGiven(true);
-            u.setOnboardingCompleted(true);
+            u.setHeightCm(height);
+            u.setWeightKg(weight);
+            u.setGoal(goal);
+            userRepository.save(u);
+        });
+    }
+
+    @Transactional
+    public void savePhase(Long tgId, Phase phase, User.PhaseMode mode) {
+        userRepository.findByTgId(tgId).ifPresent(u -> {
+            u.setPhase(phase);
+            u.setPhaseMode(mode);
+            userRepository.save(u);
+        });
+    }
+
+    @Transactional
+    public void saveRestrictions(Long tgId, java.util.List<String> restrictions) {
+        userRepository.findByTgId(tgId).ifPresent(u -> {
+            u.setRestrictions(restrictions);
+            userRepository.save(u);
+        });
+    }
+
+    @Transactional
+    public void saveSymptoms(Long tgId, java.util.List<String> symptoms) {
+        // symptoms saved in separate table later; for onboarding we skip storing
+    }
+
+    @Transactional
+    public void saveTimezone(Long tgId, String tz) {
+        userRepository.findByTgId(tgId).ifPresent(u -> {
+            u.setTimezone(tz);
+            userRepository.save(u);
+        });
+    }
+
+    @Transactional
+    public void saveSupplements(Long tgId, java.util.List<String> supps) {
+        userRepository.findByTgId(tgId).ifPresent(u -> {
+            u.setSupplements(supps);
             userRepository.save(u);
         });
     }

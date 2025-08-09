@@ -15,6 +15,8 @@ import java.util.List;
 public interface ProductRepository extends JpaRepository<Product, Long> {
     
     Page<Product> findByCategoryAndActiveTrue(ProductCategory category, Pageable pageable);
+
+    Page<Product> findByCategory(String category, Pageable pageable);
     
     @Query("SELECT p FROM Product p WHERE p.active = true AND :phase = ANY(p.allowedPhases)")
     List<Product> findByPhase(@Param("phase") String phase);
