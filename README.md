@@ -33,10 +33,6 @@ OLLAMA_MODEL=llama3.1:8b
 ```bash
 # Запустите все сервисы
 docker-compose up -d
-
-# Или используйте скрипт автозапуска
-chmod +x start.sh
-./start.sh
 ```
 
 ### 4. Проверка работы

@@ -14,5 +14,5 @@ spring:
       mode: always
 telegram:
   bot:
-    username: ${TELEGRAM_BOT_USERNAME:baria_bot}
-    token: ${TELEGRAM_BOT_TOKEN:TEST_TOKEN}
+    username: ${TELEGRAM_BOT_USERNAME:@test_bariabalance_bot}
+    token: ${TELEGRAM_BOT_TOKEN:7442673920:AAHHGFdTdfUC0SabPmy8uBJMp6ESJbHZ1Ho}
