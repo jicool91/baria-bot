@@ -168,7 +168,8 @@ public class PlanHandler {
         String aiResponse = aiService.askQuestion(prompt, user);
         
         // Парсим ответ AI или используем шаблоны
-        day = parsePlanOrUseTemplate(day, user.getPhase(), user.getRestrictions(), aiResponse);
+        String phaseCode = user.getPhase() != null ? user.getPhase().getCode() : null;
+        day = parsePlanOrUseTemplate(day, phaseCode, user.getRestrictions(), aiResponse);
         
         // Подсчитываем общий белок
         day.totalProtein = day.breakfast.protein + day.snack1.protein + 
@@ -180,7 +181,7 @@ public class PlanHandler {
     private String buildPlanPrompt(User user, int dayIndex) {
         StringBuilder prompt = new StringBuilder();
         prompt.append("Составь план питания на 1 день для пациента после бариатрической операции.\n");
-        prompt.append("Фаза: ").append(user.getPhase()).append("\n");
+        prompt.append("Фаза: ").append(user.getPhase() != null ? user.getPhase().getCode() : "unknown").append("\n");
         
         if (user.getRestrictions() != null && !user.getRestrictions().isEmpty()) {
             prompt.append("Ограничения: ").append(String.join(", ", user.getRestrictions())).append("\n");

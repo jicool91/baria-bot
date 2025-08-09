@@ -1,6 +1,7 @@
 package com.baria.bot.handler;
 
 import com.baria.bot.model.RedFlag;
+import com.baria.bot.model.Reminder;
 import com.baria.bot.model.SymptomLog;
 import com.baria.bot.model.User;
 import com.baria.bot.repository.RedFlagRepository;
@@ -28,6 +29,7 @@ public class SymptomsHandler {
     private final SymptomLogRepository symptomLogRepository;
     private final UserRepository userRepository;
     private final AiService aiService;
+    private final com.baria.bot.service.ReminderService reminderService;
     
     // Карта временных данных для триажа (в продакшене лучше использовать Redis)
     private final Map<Long, TriageSession> triageSessions = new HashMap<>();
@@ -161,7 +163,7 @@ public class SymptomsHandler {
             symptomLogRepository.save(log);
             
             // Получаем ИИ-рекомендации через RAG
-            String phase = user.getPhase() != null ? user.getPhase() : "unknown";
+            String phase = user.getPhase() != null ? user.getPhase().getCode() : "unknown";
             String aiResponse = aiService.askQuestion(
                 "Пациент после бариатрической операции, фаза " + phase + 
                 ", жалуется на: " + symptom + 
@@ -216,8 +218,14 @@ public class SymptomsHandler {
         SymptomLog log = logOpt.get();
         log.setNotes(log.getNotes() + "; Monitoring enabled for 48h");
         symptomLogRepository.save(log);
-        
-        // TODO: Создать напоминание через ReminderService
+
+        reminderService.createReminder(Reminder.builder()
+                .user(log.getUser())
+                .type(Reminder.ReminderType.SYMPTOM_WATCH)
+                .rrule("FREQ=HOURLY;INTERVAL=12;COUNT=4")
+                .localTime("00:00")
+                .meta(java.util.Map.of("symptom", log.getSymptom()))
+                .build());
         
         SendMessage message = new SendMessage();
         message.setChatId(chatId.toString());
@@ -251,7 +259,7 @@ public class SymptomsHandler {
         if (userOpt.isPresent()) {
             User user = userOpt.get();
             memo.append("Дата операции: ").append(user.getSurgeryDate()).append("\n");
-            memo.append("Текущая фаза: ").append(getPhaseDisplayName(user.getPhase())).append("\n");
+            memo.append("Текущая фаза: ").append(getPhaseDisplayName(user.getPhase().getCode())).append("\n");
             memo.append("Рост: ").append(user.getHeightCm()).append(" см\n");
             memo.append("Вес: ").append(user.getWeightKg()).append(" кг\n\n");
             

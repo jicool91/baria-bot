@@ -1,6 +1,8 @@
 package com.baria.bot.service;
 
 import com.baria.bot.model.User;
+import com.baria.bot.model.User.Goal;
+import com.baria.bot.model.User.Phase;
 import com.baria.bot.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,15 +32,15 @@ public class ProfileService {
     }
 
     @Transactional
-    public void updateRestrictions(Long tgId, String restrictions) {
+    public void updateRestrictions(Long tgId, java.util.List<String> restrictions) {
         userRepository.findByTgId(tgId).ifPresent(u -> {
-            u.setDietaryRestrictions(restrictions);
+            u.setRestrictions(restrictions);
             userRepository.save(u);
         });
     }
 
     @Transactional
-    public void updatePhysical(Long tgId, Integer heightCm, Double weightKg) {
+    public void updatePhysical(Long tgId, Integer heightCm, java.math.BigDecimal weightKg) {
         userRepository.findByTgId(tgId).ifPresent(u -> {
             u.setHeightCm(heightCm);
             u.setWeightKg(weightKg);
@@ -47,11 +49,24 @@ public class ProfileService {
     }
 
     @Transactional
-    public void updatePhase(Long tgId, String phase) {
+    public void updatePhase(Long tgId, Phase phase) {
         userRepository.findByTgId(tgId).ifPresent(u -> {
-            u.setCurrentPhase(phase);
+            u.setPhase(phase);
             userRepository.save(u);
         });
+    }
+
+    @Transactional
+    public void updateGoal(Long tgId, Goal goal) {
+        userRepository.findByTgId(tgId).ifPresent(u -> {
+            u.setGoal(goal);
+            userRepository.save(u);
+        });
+    }
+
+    @Transactional
+    public void deleteUser(Long tgId) {
+        userRepository.findByTgId(tgId).ifPresent(userRepository::delete);
     }
 }
 

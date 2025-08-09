@@ -27,7 +27,8 @@ public class CatalogHandler {
     
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
-    
+    private final java.util.Set<Long> searchAwait = new java.util.HashSet<>();
+
     private static final int PAGE_SIZE = 5;
     
     public SendMessage handleCatalogBrowse(Long chatId) {
@@ -50,6 +51,37 @@ public class CatalogHandler {
         markup.setKeyboard(keyboard);
         message.setReplyMarkup(markup);
         
+        return message;
+    }
+
+    public boolean isAwaitingSearch(Long chatId) {
+        return searchAwait.contains(chatId);
+    }
+
+    public SendMessage promptSearch(Long chatId) {
+        searchAwait.add(chatId);
+        SendMessage m = new SendMessage();
+        m.setChatId(chatId.toString());
+        m.setText("Введите название или фильтры для поиска товара");
+        return m;
+    }
+
+    public SendMessage handleSearch(Long chatId, String query) {
+        searchAwait.remove(chatId);
+        Page<Product> products = productRepository.searchProducts(query, PageRequest.of(0, PAGE_SIZE));
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId.toString());
+        if (products.isEmpty()) {
+            message.setText("Ничего не найдено");
+            message.setReplyMarkup(createBackButton());
+            return message;
+        }
+        StringBuilder text = new StringBuilder("Найдено:\n\n");
+        for (Product p : products.getContent()) {
+            text.append("• ").append(p.getTitle()).append("\n");
+        }
+        message.setText(text.toString());
+        message.setReplyMarkup(createProductListMarkup(products, "SEARCH"));
         return message;
     }
     
@@ -152,10 +184,10 @@ public class CatalogHandler {
         
         if (product.getAllowedPhases() == null || product.getAllowedPhases().isEmpty()) {
             message.setText("ℹ️ Для этого товара не указаны ограничения по фазам");
-        } else if (product.getAllowedPhases().contains(user.getPhase())) {
-            message.setText("✅ Этот товар разрешён в вашей фазе (" + getPhaseDisplayName(user.getPhase()) + ")");
+        } else if (product.getAllowedPhases().contains(user.getPhase().getCode())) {
+            message.setText("✅ Этот товар разрешён в вашей фазе (" + getPhaseDisplayName(user.getPhase().getCode()) + ")");
         } else {
-            message.setText("❌ Этот товар НЕ рекомендован в вашей фазе (" + getPhaseDisplayName(user.getPhase()) + ").\n" +
+            message.setText("❌ Этот товар НЕ рекомендован в вашей фазе (" + getPhaseDisplayName(user.getPhase().getCode()) + ").\n" +
                           "Разрешён в фазах: " + String.join(", ", product.getAllowedPhases()));
         }
         

@@ -1,8 +1,14 @@
 package com.baria.bot.handler;
 
 public enum OnboardingStep {
-    BASIC_INFO,
-    DOCTOR_CODE,
     CONSENT,
+    ONBOARDING_DATE,
+    ONBOARDING_MEASURES,
+    ONBOARDING_PHASE,
+    ONBOARDING_RESTRICTIONS,
+    ONBOARDING_SYMPTOMS,
+    ONBOARDING_TZ,
+    ONBOARDING_SUPPS,
+    ONBOARDING_SUMMARY,
     NONE
 }

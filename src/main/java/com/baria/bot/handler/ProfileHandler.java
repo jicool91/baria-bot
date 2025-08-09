@@ -5,9 +5,7 @@ import com.baria.bot.service.ProfileService;
 import org.springframework.stereotype.Component;
 
 import java.time.format.DateTimeFormatter;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 @Component
 public class ProfileHandler {
@@ -33,7 +31,11 @@ public class ProfileHandler {
             profileService.updateRestrictions(chatId, null);
             return "Ограничения: отсутствуют";
         }
-        profileService.updateRestrictions(chatId, text);
+        List<String> list = Arrays.stream(text.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+        profileService.updateRestrictions(chatId, list);
         return "Ограничения обновлены!";
     }
 
@@ -45,10 +47,11 @@ public class ProfileHandler {
         User u = opt.get();
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd.MM.yyyy");
         String surgery = u.getSurgeryDate() != null ? u.getSurgeryDate().format(fmt) : "Не указана";
-        String restr = u.getDietaryRestrictions() != null ? u.getDietaryRestrictions() : "Не указаны";
+        String phase = u.getPhase() != null ? u.getPhase().getDisplayName() : "Не указана";
+        String restr = (u.getRestrictions() != null && !u.getRestrictions().isEmpty()) ? String.join(", ", u.getRestrictions()) : "Не указаны";
         return String.format(
-                "\uD83D\uDC64 %s\n\uD83D\uDCC5 Операция: %s\n\uD83D\uDE97 Код врача: %s\n\uD83C\uDF7D\uFE0F Ограничения: %s",
-                u.getFullName(), surgery, u.getDoctorCode(), restr);
+                "\uD83D\uDC64 %s\n\uD83D\uDCC5 Операция: %s\n\uD83C\uDF7D\uFE0F Ограничения: %s\n\uD83C\uDF56 Фаза: %s",
+                u.getFullName(), surgery, restr, phase);
     }
 }
 
