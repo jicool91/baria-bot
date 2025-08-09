@@ -98,7 +98,14 @@ public class OnboardingHandler {
                 return "Есть ли симптомы сейчас? перечислите через запятую или напишите 'нет'";
             }
             case ONBOARDING_SYMPTOMS -> {
-                // пока не сохраняем
+                List<String> list = Collections.emptyList();
+                if (!text.equalsIgnoreCase("нет")) {
+                    list = Arrays.stream(text.split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .toList();
+                }
+                onboardingService.saveSymptoms(chatId, list);
                 steps.put(chatId, OnboardingStep.ONBOARDING_TZ);
                 return "Укажите ваш часовой пояс (пример Europe/Moscow)";
             }

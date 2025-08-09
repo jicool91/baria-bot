@@ -11,8 +11,7 @@ CREATE TABLE IF NOT EXISTS kb_chunk (
 );
 CREATE INDEX IF NOT EXISTS idx_kb_chunk_embedding ON kb_chunk USING ivfflat (embedding vector_cosine_ops);
 
--- пользователь (упрощённо, расширим позже)
-CREATE TABLE IF NOT EXISTS app_user (
+CREATE TABLE IF NOT EXISTS users (
   id BIGSERIAL PRIMARY KEY,
   tg_id BIGINT UNIQUE,
   tz TEXT,
