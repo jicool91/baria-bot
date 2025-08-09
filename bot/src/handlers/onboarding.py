@@ -3,8 +3,11 @@ from datetime import datetime
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from ..keyboards import main_patient_kb, quick_onboarding_kb
+from ..keyboards import main_patient_kb
 from ..db import update_user_onboarding, complete_onboarding, verify_doctor_code
+
+# Глобальная переменная для pool (будет установлена в main.py)
+pool = None
 
 class QuickRegStates(StatesGroup):
     # Упрощенная регистрация - только 3 шага
@@ -30,8 +33,12 @@ async def start_quick_onboarding(message: Message, state: FSMContext):
     )
     await state.set_state(QuickRegStates.waiting_basic_info)
 
-async def process_basic_info(message: Message, state: FSMContext):
+async def process_basic_info(message: Message, state: FSMContext, db_pool):
     """Обработка основной информации"""
+    global pool
+    if pool is None:
+        pool = db_pool
+
     try:
         # Парсим ввод пользователя
         parts = [part.strip() for part in message.text.split(',')]
@@ -49,8 +56,13 @@ async def process_basic_info(message: Message, state: FSMContext):
         # Парсим дату
         surgery_date = datetime.strptime(date_str, "%d.%m.%Y").date()
 
+        # Проверяем что дата не в будущем
+        if surgery_date > datetime.now().date():
+            raise ValueError("Дата операции не может быть в будущем")
+
         # Сохраняем данные
         await update_user_onboarding(
+            pool,
             message.from_user.id,
             full_name=full_name,
             surgery_date=surgery_date
@@ -68,6 +80,8 @@ async def process_basic_info(message: Message, state: FSMContext):
     except ValueError as e:
         if "time data" in str(e):
             error_msg = "❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ"
+        elif "будущем" in str(e):
+            error_msg = "❌ Дата операции не может быть в будущем"
         else:
             error_msg = "❌ Неверный формат. Используйте: Имя Фамилия, ДД.ММ.ГГГГ"
 
@@ -76,13 +90,17 @@ async def process_basic_info(message: Message, state: FSMContext):
             f"**Пример:** Анна Петрова, 15.06.2024"
         )
 
-async def process_doctor_code_quick(message: Message, state: FSMContext):
+async def process_doctor_code_quick(message: Message, state: FSMContext, db_pool):
     """Обработка кода врача в быстром онбординге"""
+    global pool
+    if pool is None:
+        pool = db_pool
+
     code = message.text.upper().strip()
-    doctor = await verify_doctor_code(code)
+    doctor = await verify_doctor_code(pool, code)
 
     if doctor:
-        await update_user_onboarding(message.from_user.id, doctor_code=code)
+        await update_user_onboarding(pool, message.from_user.id, doctor_code=code)
         await message.answer(
             f"✅ **Код принят!**\n\n"
             f"👨‍⚕️ Ваш врач: {doctor['doctor_name']}\n\n"
@@ -102,11 +120,15 @@ async def process_doctor_code_quick(message: Message, state: FSMContext):
             "Проверьте код у своего хирурга и попробуйте еще раз:"
         )
 
-async def process_consent_quick(message: Message, state: FSMContext):
+async def process_consent_quick(message: Message, state: FSMContext, db_pool):
     """Обработка согласия в быстром онбординге"""
+    global pool
+    if pool is None:
+        pool = db_pool
+
     if message.text.lower() in ['согласен', 'согласна', 'да']:
-        await update_user_onboarding(message.from_user.id, consent_given=True)
-        await complete_onboarding(message.from_user.id)
+        await update_user_onboarding(pool, message.from_user.id, consent_given=True)
+        await complete_onboarding(pool, message.from_user.id)
 
         await message.answer(
             "🎉 **Регистрация завершена!**\n\n"
@@ -128,16 +150,3 @@ async def process_consent_quick(message: Message, state: FSMContext):
             "❌ **Без согласия продолжение невозможно**\n\n"
             "Напишите **'согласен'** для завершения регистрации:"
         )
-
-# Функция для предложения дополнить профиль
-async def suggest_profile_completion(message: Message):
-    """Предложить заполнить недостающие данные профиля"""
-    await message.answer(
-        "💡 **Улучшите рекомендации!**\n\n"
-        "Для более точных советов по питанию рекомендуем указать:\n"
-        "• Рост и текущий вес\n"
-        "• Текущую фазу питания\n"
-        "• Пищевые ограничения\n\n"
-        "Заполнить сейчас или позже?",
-        reply_markup=quick_onboarding_kb
-    )

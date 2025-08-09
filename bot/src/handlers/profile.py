@@ -1,9 +1,13 @@
 # bot/src/handlers/profile.py
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from datetime import datetime
+from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from ..db import get_user_profile, update_user_onboarding
 from ..keyboards import main_patient_kb
+
+# Глобальная переменная для pool (будет установлена в main.py)
+pool = None
 
 class ProfileStates(StatesGroup):
     choosing_field = State()
@@ -11,16 +15,12 @@ class ProfileStates(StatesGroup):
     editing_phase = State()
     editing_restrictions = State()
 
-# Клавиатура профиля
-profile_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📊 Мои данные"), KeyboardButton(text="✏️ Редактировать")],
-        [KeyboardButton(text="📈 Статистика"), KeyboardButton(text="🔙 Главное меню")]
-    ], resize_keyboard=True
-)
-
-async def show_profile(message: Message, pool):
+async def show_profile(message: Message, db_pool):
     """Показать профиль пользователя"""
+    global pool
+    if pool is None:
+        pool = db_pool
+
     profile = await get_user_profile(pool, message.from_user.id)
 
     if not profile:
@@ -50,8 +50,13 @@ async def show_profile(message: Message, pool):
 
     completeness = int((completed_fields / total_fields) * 100)
 
+    # Прогресс-бар
+    progress_bar = "🟩" * (completeness // 20) + "⬜" * (5 - completeness // 20)
+
     profile_text = f"""
-👤 **Ваш профиль** ({completeness}% заполнен)
+👤 **Ваш профиль**
+
+📊 **Заполненность:** {completeness}% {progress_bar}
 
 📝 **Личные данные:**
 • Имя: {profile.get('full_name', '❌ Не указано')}
@@ -69,12 +74,111 @@ async def show_profile(message: Message, pool):
 📊 **Статистика:**
 • Дата регистрации: {profile.get('created_at').strftime('%d.%m.%Y')}
 • Онбординг: {'✅ Завершен' if profile.get('onboarding_completed') else '⏳ В процессе'}
+
+✏️ **Для редактирования напишите:** `редактировать профиль`
 """
 
-    await message.answer(profile_text, reply_markup=profile_kb)
+    await message.answer(profile_text)
+
+async def handle_profile_edit(message: Message):
+    """Инструкции по редактированию профиля"""
+    await message.answer(
+        "✏️ **Редактирование профиля**\n\n"
+        "Доступные команды для быстрого обновления:\n\n"
+        "📅 **Дата операции:**\n"
+        "`дата операции: ДД.ММ.ГГГГ`\n"
+        "Пример: `дата операции: 15.06.2024`\n\n"
+        "📏 **Рост и вес:**\n"
+        "`рост вес: рост,вес`\n"
+        "Пример: `рост вес: 170,75.5`\n\n"
+        "🍽️ **Фаза питания:**\n"
+        "`фаза: номер`\n"
+        "Пример: `фаза: 3`\n"
+        "(1-жидкая, 2-пюре, 3-мягкая, 4-обычная)\n\n"
+        "🚫 **Ограничения:**\n"
+        "`ограничения: текст`\n"
+        "Пример: `ограничения: непереносимость лактозы`\n\n"
+        "Просто напишите команду в чат!"
+    )
+
+async def handle_simple_profile_updates(message: Message, db_pool):
+    """Обработка команд редактирования профиля"""
+    global pool
+    if pool is None:
+        pool = db_pool
+
+    text = message.text.lower().strip()
+
+    try:
+        # Обновление даты операции
+        if text.startswith('дата операции:'):
+            date_str = text.split(':', 1)[1].strip()
+            surgery_date = datetime.strptime(date_str, "%d.%m.%Y").date()
+            
+            # Проверяем что дата не в будущем
+            if surgery_date > datetime.now().date():
+                await message.answer("❌ Дата операции не может быть в будущем")
+                return True
+                
+            await update_user_onboarding(pool, message.from_user.id, surgery_date=surgery_date)
+            await message.answer(f"✅ Дата операции обновлена: {surgery_date.strftime('%d.%m.%Y')}")
+            return True
+
+        # Обновление роста и веса
+        elif text.startswith('рост вес:'):
+            values = text.split(':', 1)[1].strip()
+            parts = values.replace(' ', '').split(',')
+            if len(parts) == 2:
+                height = int(parts[0])
+                weight = float(parts[1])
+                if 100 <= height <= 250 and 30 <= weight <= 300:
+                    await update_user_onboarding(
+                        pool, message.from_user.id,
+                        height_cm=height, weight_kg=weight
+                    )
+                    await message.answer(f"✅ Обновлено: рост {height} см, вес {weight} кг")
+                    return True
+                else:
+                    raise ValueError("Неверные значения")
+            else:
+                raise ValueError("Неверный формат")
+
+        # Обновление фазы
+        elif text.startswith('фаза:'):
+            phase_num = text.split(':', 1)[1].strip()
+            phases = {"1": "жидкая", "2": "пюре", "3": "мягкая", "4": "обычная"}
+            if phase_num in phases:
+                phase = phases[phase_num]
+                await update_user_onboarding(pool, message.from_user.id, current_phase=phase)
+                await message.answer(f"✅ Фаза питания обновлена: {phase}")
+                return True
+            else:
+                raise ValueError("Неверная фаза")
+
+        # Обновление ограничений
+        elif text.startswith('ограничения:'):
+            restrictions = text.split(':', 1)[1].strip()
+            restrictions = restrictions if restrictions.lower() != 'нет' else None
+            await update_user_onboarding(pool, message.from_user.id, dietary_restrictions=restrictions)
+            restrictions_text = restrictions if restrictions else "отсутствуют"
+            await message.answer(f"✅ Ограничения обновлены: {restrictions_text}")
+            return True
+
+        return False
+
+    except (ValueError, IndexError) as e:
+        await message.answer(
+            "❌ Ошибка в формате команды.\n\n"
+            "Правильные форматы:\n"
+            "• `дата операции: ДД.ММ.ГГГГ`\n"
+            "• `рост вес: 170,75.5`\n"
+            "• `фаза: 1-4`\n"
+            "• `ограничения: текст или нет`"
+        )
+        return True
 
 async def start_profile_editing(message: Message, state: FSMContext):
-    """Начать редактирование профиля"""
+    """Начать редактирование профиля через FSM"""
     await message.answer(
         "✏️ **Редактирование профиля**\n\n"
         "Что хотите изменить?\n\n"
@@ -85,12 +189,16 @@ async def start_profile_editing(message: Message, state: FSMContext):
     )
     await state.set_state(ProfileStates.choosing_field)
 
-async def process_field_choice(message: Message, state: FSMContext, pool):
+async def process_field_choice(message: Message, state: FSMContext, db_pool):
     """Обработка выбора поля для редактирования"""
+    global pool
+    if pool is None:
+        pool = db_pool
+
     choice = message.text.strip()
 
     if choice.lower() in ['отмена', 'назад']:
-        await message.answer("❌ Редактирование отменено", reply_markup=profile_kb)
+        await message.answer("❌ Редактирование отменено", reply_markup=main_patient_kb)
         await state.clear()
         return
 
@@ -125,8 +233,12 @@ async def process_field_choice(message: Message, state: FSMContext, pool):
     else:
         await message.answer("❌ Неверный выбор. Введите номер от 1 до 3 или 'отмена'")
 
-async def update_height_weight(message: Message, state: FSMContext, pool):
+async def update_height_weight(message: Message, state: FSMContext, db_pool):
     """Обновление роста и веса"""
+    global pool
+    if pool is None:
+        pool = db_pool
+
     try:
         parts = message.text.replace(' ', '').split(',')
         if len(parts) != 2:
@@ -151,7 +263,7 @@ async def update_height_weight(message: Message, state: FSMContext, pool):
             f"✅ **Данные обновлены!**\n\n"
             f"📏 Рост: {height} см\n"
             f"⚖️ Вес: {weight} кг",
-            reply_markup=profile_kb
+            reply_markup=main_patient_kb
         )
         await state.clear()
 
@@ -161,8 +273,12 @@ async def update_height_weight(message: Message, state: FSMContext, pool):
             "Например: 170,85.5"
         )
 
-async def update_phase(message: Message, state: FSMContext, pool):
+async def update_phase(message: Message, state: FSMContext, db_pool):
     """Обновление фазы питания"""
+    global pool
+    if pool is None:
+        pool = db_pool
+
     phases = {
         "1": "жидкая",
         "2": "пюре",
@@ -178,14 +294,18 @@ async def update_phase(message: Message, state: FSMContext, pool):
         await message.answer(
             f"✅ **Фаза питания обновлена!**\n\n"
             f"🍽️ Текущая фаза: {phase}",
-            reply_markup=profile_kb
+            reply_markup=main_patient_kb
         )
         await state.clear()
     else:
         await message.answer("❌ Введите номер от 1 до 4")
 
-async def update_restrictions(message: Message, state: FSMContext, pool):
+async def update_restrictions(message: Message, state: FSMContext, db_pool):
     """Обновление ограничений"""
+    global pool
+    if pool is None:
+        pool = db_pool
+
     restrictions = message.text if message.text.lower() != 'нет' else None
     await update_user_onboarding(pool, message.from_user.id, dietary_restrictions=restrictions)
 
@@ -193,13 +313,6 @@ async def update_restrictions(message: Message, state: FSMContext, pool):
     await message.answer(
         f"✅ **Ограничения обновлены!**\n\n"
         f"🚫 Ограничения: {restrictions_text}",
-        reply_markup=profile_kb
-    )
-    await state.clear()
-
-async def back_to_main_menu(message: Message):
-    """Возврат в главное меню"""
-    await message.answer(
-        "🏠 Главное меню",
         reply_markup=main_patient_kb
     )
+    await state.clear()
