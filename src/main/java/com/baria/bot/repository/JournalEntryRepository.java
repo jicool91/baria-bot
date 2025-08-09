@@ -8,4 +8,6 @@ import java.util.List;
 
 public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long> {
     List<JournalEntry> findByUser(User user);
+
+    void deleteAllByUser(User user);
 }

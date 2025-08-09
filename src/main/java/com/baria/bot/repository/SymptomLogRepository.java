@@ -16,6 +16,8 @@ public interface SymptomLogRepository extends JpaRepository<SymptomLog, Long> {
     
     Optional<SymptomLog> findFirstByUserAndSymptomAndStatusOrderByStartedAtDesc(
             User user, String symptom, SymptomStatus status);
-    
+
     List<SymptomLog> findByUserOrderByStartedAtDesc(User user);
+
+    void deleteAllByUser(User user);
 }

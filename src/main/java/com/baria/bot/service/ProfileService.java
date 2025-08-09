@@ -4,6 +4,9 @@ import com.baria.bot.model.User;
 import com.baria.bot.model.User.Goal;
 import com.baria.bot.model.User.Phase;
 import com.baria.bot.repository.UserRepository;
+import com.baria.bot.repository.ReminderRepository;
+import com.baria.bot.repository.SymptomLogRepository;
+import com.baria.bot.repository.JournalEntryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,9 +16,16 @@ import java.util.Optional;
 @Service
 public class ProfileService {
     private final UserRepository userRepository;
+    private final ReminderRepository reminderRepository;
+    private final SymptomLogRepository symptomLogRepository;
+    private final JournalEntryRepository journalEntryRepository;
 
-    public ProfileService(UserRepository userRepository) {
+    public ProfileService(UserRepository userRepository, ReminderRepository reminderRepository,
+                          SymptomLogRepository symptomLogRepository, JournalEntryRepository journalEntryRepository) {
         this.userRepository = userRepository;
+        this.reminderRepository = reminderRepository;
+        this.symptomLogRepository = symptomLogRepository;
+        this.journalEntryRepository = journalEntryRepository;
     }
 
     public Optional<User> getByTgId(Long tgId) {
@@ -66,7 +76,12 @@ public class ProfileService {
 
     @Transactional
     public void deleteUser(Long tgId) {
-        userRepository.findByTgId(tgId).ifPresent(userRepository::delete);
+        userRepository.findByTgId(tgId).ifPresent(u -> {
+            reminderRepository.deleteAllByUser(u);
+            symptomLogRepository.deleteAllByUser(u);
+            journalEntryRepository.deleteAllByUser(u);
+            userRepository.delete(u);
+        });
     }
 }
 

@@ -4,6 +4,8 @@ import com.baria.bot.model.User;
 import com.baria.bot.model.User.Goal;
 import com.baria.bot.model.User.Phase;
 import com.baria.bot.repository.UserRepository;
+import com.baria.bot.repository.SymptomLogRepository;
+import com.baria.bot.model.SymptomLog;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,9 +15,11 @@ import java.util.Optional;
 @Service
 public class OnboardingService {
     private final UserRepository userRepository;
+    private final SymptomLogRepository symptomLogRepository;
 
-    public OnboardingService(UserRepository userRepository) {
+    public OnboardingService(UserRepository userRepository, SymptomLogRepository symptomLogRepository) {
         this.userRepository = userRepository;
+        this.symptomLogRepository = symptomLogRepository;
     }
 
     public User getOrCreate(Long tgId, String username) {
@@ -72,7 +76,17 @@ public class OnboardingService {
 
     @Transactional
     public void saveSymptoms(Long tgId, java.util.List<String> symptoms) {
-        // symptoms saved in separate table later; for onboarding we skip storing
+        if (symptoms == null || symptoms.isEmpty()) return;
+        userRepository.findByTgId(tgId).ifPresent(u -> {
+            for (String s : symptoms) {
+                SymptomLog log = new SymptomLog();
+                log.setUser(u);
+                log.setSymptom(s);
+                log.setStartedAt(java.time.LocalDateTime.now());
+                log.setStatus("active");
+                symptomLogRepository.save(log);
+            }
+        });
     }
 
     @Transactional

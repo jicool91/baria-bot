@@ -1,6 +1,7 @@
 package com.baria.bot.handler;
 
 import com.baria.bot.repository.UserRepository;
+import com.baria.bot.repository.SymptomLogRepository;
 import com.baria.bot.service.OnboardingService;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -11,7 +12,8 @@ public class OnboardingHandlerTest {
     @Test
     public void testFlow() {
         UserRepository userRepository = Mockito.mock(UserRepository.class);
-        OnboardingService service = new OnboardingService(userRepository);
+        SymptomLogRepository symptomLogRepository = Mockito.mock(SymptomLogRepository.class);
+        OnboardingService service = new OnboardingService(userRepository, symptomLogRepository);
         OnboardingHandler handler = new OnboardingHandler(service, userRepository);
         String start = handler.start(1L, "user");
         assertTrue(start.contains("согласен"));
